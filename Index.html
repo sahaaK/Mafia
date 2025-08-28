@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mafia Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .card {
+            perspective: 1000px;
+            transform-style: preserve-3d;
+            transition: all 0.5s ease;
+        }
+        .card.flipped {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            backface-visibility: hidden;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+        .card-back {
+            transform: rotateY(0deg);
+        }
+        .card-front {
+            transform: rotateY(180deg);
+        }
+        .player-ready {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+        .role-mafia {
+            background: linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%);
+        }
+        .role-citizen {
+            background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- App Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-2 text-red-500">MAFIA GAME</h1>
+            <p class="text-gray-400">Gather your friends and find out who's the mafia!</p>
+        </header>
+
+        <!-- Main Game Container -->
+        <div id="app" class="max-w-4xl mx-auto">
+            <!-- Room Creation/Join Section -->
+            <div id="room-section" class="bg-gray-800 rounded-lg p-6 shadow-lg mb-8">
+                <h2 class="text-2xl font-semibold mb-4">Join or Create a Room</h2>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex-1">
+                        <label for="player-name" class="block text-sm font-medium mb-1">Your Name</label>
+                        <input type="text" id="player-name" placeholder="Enter your name" 
+                            class="w-full px-4 py-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
+                    </div>
+                    <div class="flex-1">
+                        <label for="room-code" class="block text-sm font-medium mb-1">Room Code</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="room-code" placeholder="Enter room code" 
+                                class="flex-1 px-4 py-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
+                            <button id="join-room" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition">
+                                Join
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <p class="text-gray-400 mb-2">or</p>
+                    <button id="create-room" class="px-6 py-2 bg-red-600 hover:bg-red-700 rounded font-medium transition">
+                        Create New Room
+                    </button>
+                </div>
+            </div>
+
+            <!-- Lobby Section (Hidden Initially) -->
+            <div id="lobby-section" class="hidden bg-gray-800 rounded-lg p-6 shadow-lg mb-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold">Room: <span id="current-room-code" class="text-red-400"></span></h2>
+                    <div class="flex items-center gap-2">
+                        <span id="player-count" class="bg-gray-700 px-3 py-1 rounded-full text-sm">0 players</span>
+                        <button id="copy-room-code" class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition" title="Copy room code">
+                            <i class="far fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Players List -->
+                    <div class="md:col-span-2">
+                        <h3 class="text-xl font-medium mb-3">Players</h3>
+                        <div id="players-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Players will be added here dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Game Controls -->
+                    <div class="space-y-4">
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-medium mb-2">Game Settings</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label for="mafia-count" class="block text-sm font-medium mb-1">Mafia Count</label>
+                                    <select id="mafia-count" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
+                                        <option value="1">1 Mafia</option>
+                                        <option value="2">2 Mafia</option>
+                                        <option value="3">3 Mafia</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="game-mode" class="block text-sm font-medium mb-1">Game Mode</label>
+                                    <select id="game-mode" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
+                                        <option value="classic">Classic</option>
+                                        <option value="quick">Quick</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="ready-controls" class="flex flex-col gap-3">
+                            <button id="ready-btn" class="w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                                <i class="fas fa-check"></i> Ready
+                            </button>
+                            <button id="start-game" class="w-full py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition hidden">
+                                Start Game
+                            </button>
+                            <button id="leave-room" class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition">
+                                Leave Room
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Role Reveal Section (Hidden Initially) -->
+            <div id="role-section" class="hidden bg-gray-800 rounded-lg p-6 shadow-lg">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">Your Role</h2>
+                    <p class="text-gray-400">Wait for all players to be ready...</p>
+                </div>
+
+                <div class="flex justify-center">
+                    <div class="card w-64 h-96 cursor-pointer" id="role-card">
+                        <div class="card-face card-back bg-gradient-to-br from-gray-700 to-gray-900 rounded-xl shadow-lg flex items-center justify-center">
+                            <div class="text-center p-4">
+                                <i class="fas fa-question text-6xl text-gray-500 mb-4"></i>
+                                <p class="text-xl font-medium">Click to reveal</p>
+                            </div>
+                        </div>
+                        <div class="card-face card-front rounded-xl shadow-lg flex items-center justify-center" id="role-front">
+                            <div class="text-center p-4">
+                                <i class="fas fa-user-secret text-6xl mb-4 hidden" id="mafia-icon"></i>
+                                <i class="fas fa-user text-6xl mb-4 hidden" id="citizen-icon"></i>
+                                <p class="text-2xl font-bold" id="role-text"></p>
+                                <p class="mt-2 text-gray-300" id="role-description"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 text-center">
+                    <div id="reveal-status" class="mb-4">
+                        <p class="text-gray-400">Waiting for all players to be ready...</p>
+                        <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                            <div id="ready-progress" class="bg-green-500 h-2.5 rounded-full" style="width: 0%"></div>
+                        </div>
+                        <p class="text-sm text-gray-400 mt-1"><span id="ready-count">0</span>/<span id="total-players">0</span> players ready</p>
+                    </div>
+                    <button id="back-to-lobby" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition hidden">
+                        Back to Lobby
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>Mafia Game © 2023 | Play with friends and discover who's the mafia!</p>
+        </footer>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDESK1oQ1lcWphlzlyqprcMRMpx-CqGS7s",
+            authDomain: "wordspy-f7440.firebaseapp.com",
+            databaseURL: "https://wordspy-f7440-default-rtdb.firebaseio.com",
+            projectId: "wordspy-f7440",
+            storageBucket: "wordspy-f7440.firebasestorage.app",
+            messagingSenderId: "181466033426",
+            appId: "1:181466033426:web:a5fcd5f9ffde2baca817cb",
+            measurementId: "G-E5KEK1YFXH"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // DOM Elements
+        const roomSection = document.getElementById('room-section');
+        const lobbySection = document.getElementById('lobby-section');
+        const roleSection = document.getElementById('role-section');
+        const playerNameInput = document.getElementById('player-name');
+        const roomCodeInput = document.getElementById('room-code');
+        const joinRoomBtn = document.getElementById('join-room');
+        const createRoomBtn = document.getElementById('create-room');
+        const currentRoomCode = document.getElementById('current-room-code');
+        const copyRoomCodeBtn = document.getElementById('copy-room-code');
+        const playersList = document.getElementById('players-list');
+        const playerCount = document.getElementById('player-count');
+        const readyBtn = document.getElementById('ready-btn');
+        const startGameBtn = document.getElementById('start-game');
+        const leaveRoomBtn = document.getElementById('leave-room');
+        const roleCard = document.getElementById('role-card');
+        const mafiaIcon = document.getElementById('mafia-icon');
+        const citizenIcon = document.getElementById('citizen-icon');
+        const roleText = document.getElementById('role-text');
+        const roleDescription = document.getElementById('role-description');
+        const readyCount = document.getElementById('ready-count');
+        const totalPlayers = document.getElementById('total-players');
+        const readyProgress = document.getElementById('ready-progress');
+        const backToLobbyBtn = document.getElementById('back-to-lobby');
+        const mafiaCountSelect = document.getElementById('mafia-count');
+        const gameModeSelect = document.getElementById('game-mode');
+
+        // Game State
+        let currentRoom = null;
+        let playerId = null;
+        let playerName = '';
+        let isHost = false;
+        let isReady = false;
+        let role = '';
+        let roomUnsubscribe = null;
+        let playersUnsubscribe = null;
+
+        // Generate a random 4-letter room code
+        function generateRoomCode() {
+            const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+            let code = '';
+            for (let i = 0; i < 4; i++) {
+                code += letters.charAt(Math.floor(Math.random() * letters.length));
+            }
+            return code;
+        }
+
+        // Join a room
+        async function joinRoom(roomCode, isCreating = false) {
+            playerName = playerNameInput.value.trim();
+            if (!playerName) {
+                alert('Please enter your name');
+                return;
+            }
+
+            if (!roomCode) {
+                alert('Please enter a room code');
+                return;
+            }
+
+            // Generate a unique player ID
+            playerId = Math.random().toString(36).substring(2, 15);
+
+            // Check if room exists
+            const roomRef = db.collection('rooms').doc(roomCode);
+            const roomDoc = await roomRef.get();
+
+            if (!roomDoc.exists && !isCreating) {
+                alert('Room does not exist');
+                return;
+            }
+
+            // If creating a new room
+            if (isCreating) {
+                if (roomDoc.exists) {
+                    alert('Room already exists');
+                    return;
+                }
+
+                await roomRef.set({
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    status: 'lobby',
+                    host: playerId,
+                    mafiaCount: parseInt(mafiaCountSelect.value),
+                    gameMode: gameModeSelect.value,
+                    revealTriggered: false
+                });
+                isHost = true;
+            }
+
+            currentRoom = roomCode;
+            currentRoomCode.textContent = roomCode;
+
+            // Add player to the room
+            await roomRef.collection('players').doc(playerId).set({
+                name: playerName,
+                ready: false,
+                role: '',
+                joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Show lobby
+            roomSection.classList.add('hidden');
+            lobbySection.classList.remove('hidden');
+
+            // Listen for room changes
+            roomUnsubscribe = roomRef.onSnapshot(doc => {
+                const data = doc.data();
+                if (!data) return;
+
+                // Update player count
+                totalPlayers.textContent = data.playerCount || 0;
+
+                // Show start game button for host when all are ready
+                if (isHost && data.status === 'lobby') {
+                    const allReady = data.readyCount === data.playerCount && data.playerCount > 1;
+                    startGameBtn.classList.toggle('hidden', !allReady);
+                }
+
+                // Handle role reveal
+                if (data.status === 'revealing' && data.revealTriggered) {
+                    revealRole();
+                }
+
+                // Handle game reset
+                if (data.status === 'lobby' && roleSection.classList.contains('hidden') === false) {
+                    resetToLobby();
+                }
+            });
+
+            // Listen for players changes
+            playersUnsubscribe = roomRef.collection('players').onSnapshot(snapshot => {
+                playersList.innerHTML = '';
+                let readyCount = 0;
+                let playerCount = 0;
+
+                snapshot.forEach(doc => {
+                    const player = doc.data();
+                    playerCount++;
+                    if (player.ready) readyCount++;
+
+                    const playerElement = document.createElement('div');
+                    playerElement.className = `bg-gray-700 p-3 rounded-lg flex items-center justify-between ${player.ready ? 'player-ready border-2 border-green-500' : ''}`;
+                    
+                    playerElement.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <span>${player.name}</span>
+                            ${doc.id === playerId ? '<span class="text-xs bg-gray-600 px-2 py-0.5 rounded">You</span>' : ''}
+                            ${player.host ? '<span class="text-xs bg-yellow-600 px-2 py-0.5 rounded">Host</span>' : ''}
+                        </div>
+                        <div>
+                            ${player.ready ? '<i class="fas fa-check-circle text-green-500"></i>' : '<i class="far fa-clock text-gray-400"></i>'}
+                        </div>
+                    `;
+
+                    playersList.appendChild(playerElement);
+                });
+
+                // Update player count display
+                playerCount.textContent = `${playerCount} player${playerCount !== 1 ? 's' : ''}`;
+
+                // Update ready count in lobby
+                const readyPercentage = playerCount > 0 ? (readyCount / playerCount) * 100 : 0;
+                readyProgress.style.width = `${readyPercentage}%`;
+
+                // Update room stats
+                roomRef.update({
+                    playerCount: playerCount,
+                    readyCount: readyCount
+                });
+            });
+        }
+
+        // Toggle ready status
+        async function toggleReady() {
+            if (!currentRoom || !playerId) return;
+
+            isReady = !isReady;
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            
+            await roomRef.collection('players').doc(playerId).update({
+                ready: isReady
+            });
+
+            readyBtn.innerHTML = isReady 
+                ? '<i class="fas fa-times"></i> Not Ready' 
+                : '<i class="fas fa-check"></i> Ready';
+            readyBtn.className = isReady 
+                ? 'w-full py-3 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-medium transition flex items-center justify-center gap-2'
+                : 'w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2';
+        }
+
+        // Start the game (host only)
+        async function startGame() {
+            if (!isHost || !currentRoom) return;
+
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            const playersSnapshot = await roomRef.collection('players').get();
+            const players = playersSnapshot.docs.map(doc => doc.id);
+            const mafiaCount = parseInt(mafiaCountSelect.value);
+
+            // Assign roles randomly
+            const shuffledPlayers = [...players].sort(() => 0.5 - Math.random());
+            const mafiaPlayers = shuffledPlayers.slice(0, mafiaCount);
+            const citizenPlayers = shuffledPlayers.slice(mafiaCount);
+
+            // Update players with their roles
+            const batch = db.batch();
+            mafiaPlayers.forEach(playerId => {
+                const playerRef = roomRef.collection('players').doc(playerId);
+                batch.update(playerRef, { role: 'mafia' });
+            });
+            citizenPlayers.forEach(playerId => {
+                const playerRef = roomRef.collection('players').doc(playerId);
+                batch.update(playerRef, { role: 'citizen' });
+            });
+            await batch.commit();
+
+            // Update room status
+            await roomRef.update({
+                status: 'revealing',
+                revealTriggered: false
+            });
+
+            // Show role section
+            lobbySection.classList.add('hidden');
+            roleSection.classList.remove('hidden');
+        }
+
+        // Reveal role to player
+        async function revealRole() {
+            if (!currentRoom || !playerId) return;
+
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            const playerDoc = await roomRef.collection('players').doc(playerId).get();
+            
+            if (playerDoc.exists) {
+                role = playerDoc.data().role;
+                
+                // Set role display
+                if (role === 'mafia') {
+                    roleText.textContent = 'MAFIA';
+                    roleDescription.textContent = 'Eliminate all citizens without being caught!';
+                    document.getElementById('role-front').classList.add('role-mafia');
+                    mafiaIcon.classList.remove('hidden');
+                    citizenIcon.classList.add('hidden');
+                } else {
+                    roleText.textContent = 'CITIZEN';
+                    roleDescription.textContent = 'Find and eliminate the mafia before it\'s too late!';
+                    document.getElementById('role-front').classList.add('role-citizen');
+                    citizenIcon.classList.remove('hidden');
+                    mafiaIcon.classList.add('hidden');
+                }
+
+                // Flip card after a short delay for dramatic effect
+                setTimeout(() => {
+                    roleCard.classList.add('flipped');
+                    backToLobbyBtn.classList.remove('hidden');
+                }, 1000);
+            }
+        }
+
+        // Trigger role reveal (host only)
+        async function triggerReveal() {
+            if (!isHost || !currentRoom) return;
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            await roomRef.update({ revealTriggered: true });
+        }
+
+        // Reset to lobby
+        async function resetToLobby() {
+            if (!currentRoom || !playerId) return;
+
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            
+            // Reset player ready status
+            await roomRef.collection('players').doc(playerId).update({
+                ready: false,
+                role: ''
+            });
+
+            // Reset local state
+            isReady = false;
+            role = '';
+            
+            // Reset UI
+            readyBtn.innerHTML = '<i class="fas fa-check"></i> Ready';
+            readyBtn.className = 'w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2';
+            roleCard.classList.remove('flipped');
+            document.getElementById('role-front').classList.remove('role-mafia', 'role-citizen');
+            
+            // Show lobby
+            roleSection.classList.add('hidden');
+            lobbySection.classList.remove('hidden');
+        }
+
+        // Leave room
+        async function leaveRoom() {
+            if (!currentRoom || !playerId) return;
+
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            
+            // Remove player from room
+            await roomRef.collection('players').doc(playerId).delete();
+
+            // If host and last player, delete the room
+            if (isHost) {
+                const playersSnapshot = await roomRef.collection('players').get();
+                if (playersSnapshot.empty) {
+                    await roomRef.delete();
+                } else {
+                    // Assign new host
+                    const firstPlayer = playersSnapshot.docs[0];
+                    await roomRef.update({ host: firstPlayer.id });
+                }
+            }
+
+            // Clean up
+            if (roomUnsubscribe) roomUnsubscribe();
+            if (playersUnsubscribe) playersUnsubscribe();
+            
+            // Reset state
+            currentRoom = null;
+            playerId = null;
+            isHost = false;
+            isReady = false;
+            role = '';
+            
+            // Reset UI
+            roomSection.classList.remove('hidden');
+            lobbySection.classList.add('hidden');
+            roleSection.classList.add('hidden');
+            playerNameInput.value = '';
+            roomCodeInput.value = '';
+        }
+
+        // Event Listeners
+        joinRoomBtn.addEventListener('click', () => joinRoom(roomCodeInput.value.trim().toUpperCase()));
+        createRoomBtn.addEventListener('click', () => joinRoom(generateRoomCode(), true));
+        readyBtn.addEventListener('click', toggleReady);
+        startGameBtn.addEventListener('click', startGame);
+        leaveRoomBtn.addEventListener('click', leaveRoom);
+        backToLobbyBtn.addEventListener('click', resetToLobby);
+        copyRoomCodeBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentRoomCode.textContent);
+            const originalText = copyRoomCodeBtn.innerHTML;
+            copyRoomCodeBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            setTimeout(() => {
+                copyRoomCodeBtn.innerHTML = originalText;
+            }, 2000);
+        });
+
+        // Card click handler
+        roleCard.addEventListener('click', () => {
+            if (roleCard.classList.contains('flipped')) return;
+            triggerReveal();
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Generate a random player name
+            const adjectives = ['Clever', 'Brave', 'Sneaky', 'Wise', 'Quick', 'Silent', 'Sharp'];
+            const nouns = ['Fox', 'Wolf', 'Owl', 'Hawk', 'Panther', 'Lynx', 'Raven'];
+            const randomName = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+            playerNameInput.value = randomName;
+        });
+    </script>
+</body>
+  </html>
