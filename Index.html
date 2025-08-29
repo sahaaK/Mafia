@@ -3,12 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mafia Games</title>
+    <title>Mafia Underworld</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;1,400&family=Cinzel+Decorative:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Alegreya', serif;
+            background-color: #0a0a0a;
+            color: #e0e0e0;
+            overflow-x: hidden;
+        }
+        
         .card {
             perspective: 1000px;
             transform-style: preserve-3d;
@@ -33,162 +42,247 @@
             animation: pulse 1.5s infinite;
         }
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
         .role-mafia {
             background: linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
         }
         .role-citizen {
             background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        
+        /* Neon flicker effect */
+        .neon-flicker {
+            animation: flicker 3s infinite alternate;
+        }
+        @keyframes flicker {
+            0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+                text-shadow: 
+                    0 0 8px #fff,
+                    0 0 15px #fff,
+                    0 0 20px #fff,
+                    0 0 40px #ef4444,
+                    0 0 60px #ef4444,
+                    0 0 80px #ef4444,
+                    0 0 100px #ef4444,
+                    0 0 150px #ef4444;
+            }
+            20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+                text-shadow: none;
+                box-shadow: none;
+            }
+        }
+        
+        /* Smoke effect */
+        .smoke {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><filter id="f"><feTurbulence baseFrequency="0.3" numOctaves="3" seed="1"/><feDisplacementMap in="SourceGraphic" scale="5"/></filter><rect width="100" height="100" fill="none"/><circle cx="50" cy="50" r="40" filter="url(%23f)" fill="rgba(255,255,255,0.03)"/></svg>');
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        /* Bullet hole decoration */
+        .bullet-hole {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.5) 50%, transparent 70%);
+            border-radius: 50%;
+        }
+        
+        /* Blood splatter decoration */
+        .blood-splatter {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, rgba(220, 38, 38, 0.2) 0%, transparent 70%);
+            filter: blur(2px);
+            transform: rotate(45deg);
+        }
+        
+        /* Gunshot sound effect */
+        .gunshot {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <div class="container mx-auto px-4 py-8">
+<body class="relative">
+    <!-- Background elements -->
+    <div class="smoke"></div>
+    <div class="bullet-hole" style="top: 15%; left: 10%;"></div>
+    <div class="bullet-hole" style="top: 25%; left: 85%;"></div>
+    <div class="bullet-hole" style="top: 75%; left: 20%;"></div>
+    <div class="blood-splatter" style="top: 30%; left: 30%;"></div>
+    <div class="blood-splatter" style="top: 70%; left: 70%;"></div>
+    
+    <!-- Gunshot sound effect -->
+    <audio id="gunshot-sound" class="gunshot" src="https://assets.mixkit.co/sfx/preview/mixkit-gun-shot-1680.mp3" preload="auto"></audio>
+    
+    <div class="container mx-auto px-4 py-8 relative z-10">
         <!-- App Header -->
         <header class="text-center mb-12">
-            <h1 class="text-4xl font-bold mb-2 text-red-500">MAFIA GAME</h1>
-            <p class="text-gray-400">Gather all ur unemployed and have fun!</p>
+            <h1 class="text-6xl font-bold mb-4 neon-flicker" style="font-family: 'Cinzel Decorative', cursive; color: #ef4444;">MAFIA UNDERWORLD</h1>
+            <p class="text-gray-400 italic">"Sleep with the fishes or rule the streets..."</p>
         </header>
-
+        
         <!-- Main Game Container -->
         <div id="app" class="max-w-4xl mx-auto">
             <!-- Room Creation/Join Section -->
-            <div id="room-section" class="bg-gray-800 rounded-lg p-6 shadow-lg mb-8">
-                <h2 class="text-2xl font-semibold mb-4">Join or Create a Room</h2>
-                <div class="flex flex-col md:flex-row gap-4">
-                    <div class="flex-1">
-                        <label for="player-name" class="block text-sm font-medium mb-1">Your Name</label>
-                        <input type="text" id="player-name" placeholder="Enter your name" 
-                            class="w-full px-4 py-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
-                    </div>
-                    <div class="flex-1">
-                        <label for="room-code" class="block text-sm font-medium mb-1">Room Code</label>
-                        <div class="flex gap-2">
-                            <input type="text" id="room-code" placeholder="Enter room code" 
-                                class="flex-1 px-4 py-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
-                            <button id="join-room" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition">
-                                Join
-                            </button>
+            <div id="room-section" class="bg-gray-900 rounded-lg p-8 shadow-xl border border-gray-800 mb-8 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-br from-transparent via-gray-900 to-transparent opacity-30"></div>
+                <div class="relative z-10">
+                    <h2 class="text-3xl font-semibold mb-6 text-red-500" style="font-family: 'Cinzel Decorative', cursive;">ENTER THE UNDERWORLD</h2>
+                    <div class="flex flex-col md:flex-row gap-6">
+                        <div class="flex-1">
+                            <label for="player-name" class="block text-sm font-medium mb-2 text-gray-300">YOUR ALIAS</label>
+                            <input type="text" id="player-name" placeholder="Enter your underworld name"
+                                class="w-full px-4 py-3 rounded bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-gray-500">
+                        </div>
+                        <div class="flex-1">
+                            <label for="room-code" class="block text-sm font-medium mb-2 text-gray-300">SAFEHOUSE CODE</label>
+                            <div class="flex gap-3">
+                                <input type="text" id="room-code" placeholder="Enter 4-letter code"
+                                    class="flex-1 px-4 py-3 rounded bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-gray-500 uppercase">
+                                <button id="join-room" class="px-6 py-3 bg-red-600 hover:bg-red-700 rounded font-medium transition transform hover:scale-105 flex items-center gap-2">
+                                    <i class="fas fa-door-open"></i> ENTER
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="mt-4 text-center">
-                    <p class="text-gray-400 mb-2">or</p>
-                    <button id="create-room" class="px-6 py-2 bg-red-600 hover:bg-red-700 rounded font-medium transition">
-                        Create New Room
-                    </button>
-                </div>
-            </div>
-
-            <!-- Lobby Section (Hidden Initially) -->
-            <div id="lobby-section" class="hidden bg-gray-800 rounded-lg p-6 shadow-lg mb-8">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-semibold">Room: <span id="current-room-code" class="text-red-400"></span></h2>
-                    <div class="flex items-center gap-2">
-                        <span id="player-count" class="bg-gray-700 px-3 py-1 rounded-full text-sm">0 players</span>
-                        <button id="copy-room-code" class="p-2 bg-gray-700 hover:bg-gray-600 rounded transition" title="Copy room code">
-                            <i class="far fa-copy"></i>
+                    <div class="mt-6 text-center">
+                        <p class="text-gray-500 mb-4 italic">- OR -</p>
+                        <button id="create-room" class="px-8 py-3 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 rounded-lg font-bold transition transform hover:scale-105 flex items-center gap-2 mx-auto">
+                            <i class="fas fa-warehouse"></i> ESTABLISH NEW SAFEHOUSE
                         </button>
                     </div>
                 </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <!-- Players List -->
-                    <div class="md:col-span-2">
-                        <h3 class="text-xl font-medium mb-3">Players</h3>
-                        <div id="players-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <!-- Players will be added here dynamically -->
+            </div>
+            
+            <!-- Lobby Section (Hidden Initially) -->
+            <div id="lobby-section" class="hidden bg-gray-900 rounded-lg p-8 shadow-xl border border-gray-800 mb-8 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-br from-transparent via-gray-900 to-transparent opacity-30"></div>
+                <div class="relative z-10">
+                    <div class="flex justify-between items-center mb-8">
+                        <h2 class="text-3xl font-semibold" style="font-family: 'Cinzel Decorative', cursive;">SAFEHOUSE: <span id="current-room-code" class="text-red-500 neon-flicker"></span></h2>
+                        <div class="flex items-center gap-3">
+                            <span id="player-count" class="bg-gray-800 px-4 py-1.5 rounded-full text-sm border border-gray-700">0 FAMIGLIA</span>
+                            <button id="copy-room-code" class="p-2 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700" title="Copy safehouse code">
+                                <i class="far fa-copy"></i>
+                            </button>
                         </div>
                     </div>
-
-                    <!-- Game Controls -->
-                    <div class="space-y-4">
-                        <div class="bg-gray-700 p-4 rounded-lg">
-                            <h3 class="text-lg font-medium mb-2">Game Settings</h3>
-                            <div class="space-y-3">
-                                <div>
-                                    <label for="mafia-count" class="block text-sm font-medium mb-1">Mafia Count</label>
-                                    <select id="mafia-count" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
-                                        <option value="1">1 Mafia</option>
-                                        <option value="2">2 Mafia</option>
-                                        <option value="3">3 Mafia</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="game-mode" class="block text-sm font-medium mb-1">Game Mode</label>
-                                    <select id="game-mode" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500">
-                                        <option value="classic">Classic</option>
-                                        <option value="quick">Quick</option>
-                                    </select>
-                                </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Players List -->
+                        <div class="lg:col-span-2">
+                            <h3 class="text-xl font-medium mb-4 text-red-400" style="font-family: 'Cinzel Decorative', cursive;">THE FAMILY</h3>
+                            <div id="players-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <!-- Players will be added here dynamically -->
                             </div>
                         </div>
-
-                        <div id="ready-controls" class="flex flex-col gap-3">
-                            <button id="ready-btn" class="w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2">
-                                <i class="fas fa-check"></i> Ready
-                            </button>
-                            <button id="start-game" class="w-full py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition hidden">
-                                Start Game
-                            </button>
-                            <button id="leave-room" class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition">
-                                Leave Room
-                            </button>
+                        
+                        <!-- Game Controls -->
+                        <div class="space-y-6">
+                            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                                <h3 class="text-lg font-medium mb-3 text-red-400" style="font-family: 'Cinzel Decorative', cursive;">UNDERWORLD RULES</h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label for="mafia-count" class="block text-sm font-medium mb-2 text-gray-300">MAFIA CAPOS</label>
+                                        <select id="mafia-count" class="w-full px-4 py-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500 text-white">
+                                            <option value="1">1 DON</option>
+                                            <option value="2">2 CAPOS</option>
+                                            <option value="3">3 SOLDIERS</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="game-mode" class="block text-sm font-medium mb-2 text-gray-300">GAME STYLE</label>
+                                        <select id="game-mode" class="w-full px-4 py-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500 text-white">
+                                            <option value="classic">CLASSIC SICILIAN</option>
+                                            <option value="quick">QUICK HIT</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="ready-controls" class="flex flex-col gap-4">
+                                <button id="ready-btn" class="w-full py-4 bg-gradient-to-r from-green-700 to-green-900 hover:from-green-600 hover:to-green-800 rounded-lg font-bold transition transform hover:scale-105 flex items-center justify-center gap-3">
+                                    <i class="fas fa-handshake"></i> READY FOR THE JOB
+                                </button>
+                                <button id="start-game" class="w-full py-4 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 rounded-lg font-bold transition transform hover:scale-105 flex items-center justify-center gap-3 hidden">
+                                    <i class="fas fa-gun"></i> INITIATE THE HIT
+                                </button>
+                                <button id="leave-room" class="w-full py-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition border border-gray-700 flex items-center justify-center gap-2">
+                                    <i class="fas fa-door-closed"></i> LEAVE SAFEHOUSE
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-
+            
             <!-- Role Reveal Section (Hidden Initially) -->
-            <div id="role-section" class="hidden bg-gray-800 rounded-lg p-6 shadow-lg">
-                <div class="text-center mb-8">
-                    <h2 class="text-3xl font-bold mb-2">Your Role</h2>
-                    <p class="text-gray-400">Wait for all players to be ready...</p>
-                </div>
-
-                <div class="flex justify-center">
-                    <div class="card w-64 h-96 cursor-pointer" id="role-card">
-                        <div class="card-face card-back bg-gradient-to-br from-gray-700 to-gray-900 rounded-xl shadow-lg flex items-center justify-center">
-                            <div class="text-center p-4">
-                                <i class="fas fa-question text-6xl text-gray-500 mb-4"></i>
-                                <p class="text-xl font-medium">Click to reveal</p>
+            <div id="role-section" class="hidden bg-gray-900 rounded-lg p-8 shadow-xl border border-gray-800 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-br from-transparent via-gray-900 to-transparent opacity-30"></div>
+                <div class="relative z-10">
+                    <div class="text-center mb-10">
+                        <h2 class="text-4xl font-bold mb-4 text-red-500 neon-flicker" style="font-family: 'Cinzel Decorative', cursive;">YOUR LOYALTY</h2>
+                        <p class="text-gray-400 italic">"The family doesn't reveal its secrets..."</p>
+                    </div>
+                    
+                    <div class="flex justify-center">
+                        <div class="card w-72 h-96 cursor-pointer transform hover:scale-105 transition" id="role-card">
+                            <div class="card-face card-back bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-lg flex items-center justify-center border-2 border-gray-700">
+                                <div class="text-center p-6">
+                                    <i class="fas fa-question text-7xl text-gray-600 mb-6"></i>
+                                    <p class="text-xl font-medium text-gray-300">CLICK TO REVEAL</p>
+                                    <p class="text-sm text-gray-500 mt-2">(Your fate awaits)</p>
+                                </div>
                             </div>
-                        </div>
-                        <div class="card-face card-front rounded-xl shadow-lg flex items-center justify-center" id="role-front">
-                            <div class="text-center p-4">
-                                <i class="fas fa-user-secret text-6xl mb-4 hidden" id="mafia-icon"></i>
-                                <i class="fas fa-user text-6xl mb-4 hidden" id="citizen-icon"></i>
-                                <p class="text-2xl font-bold" id="role-text"></p>
-                                <p class="mt-2 text-gray-300" id="role-description"></p>
+                            <div class="card-face card-front rounded-xl shadow-lg flex items-center justify-center border-2 border-gray-700" id="role-front">
+                                <div class="text-center p-6">
+                                    <i class="fas fa-user-secret text-7xl mb-6 hidden" id="mafia-icon"></i>
+                                    <i class="fas fa-user-tie text-7xl mb-6 hidden" id="citizen-icon"></i>
+                                    <p class="text-3xl font-bold mb-2" id="role-text" style="font-family: 'Cinzel Decorative', cursive;"></p>
+                                    <p class="text-gray-300 italic" id="role-description"></p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <div class="mt-8 text-center">
-                    <div id="reveal-status" class="mb-4">
-                        <p class="text-gray-400">Waiting for all players to be ready...</p>
-                        <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
-                            <div id="ready-progress" class="bg-green-500 h-2.5 rounded-full" style="width: 0%"></div>
+                    
+                    <div class="mt-12 text-center">
+                        <div id="reveal-status" class="mb-6">
+                            <p class="text-gray-400 mb-3">Waiting for the family to assemble...</p>
+                            <div class="w-full bg-gray-800 rounded-full h-3 mt-2 mx-auto max-w-md">
+                                <div id="ready-progress" class="bg-red-500 h-3 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-2"><span id="ready-count">0</span>/<span id="total-players">0</span> FAMIGLIA READY</p>
                         </div>
-                        <p class="text-sm text-gray-400 mt-1"><span id="ready-count">0</span>/<span id="total-players">0</span> players ready</p>
+                        <button id="back-to-lobby" class="px-8 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg font-medium transition border border-gray-700 transform hover:scale-105 flex items-center gap-2 mx-auto hidden">
+                            <i class="fas fa-arrow-left"></i> BACK TO SAFEHOUSE
+                        </button>
                     </div>
-                    <button id="back-to-lobby" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition hidden">
-                        Back to Lobby
-                    </button>
                 </div>
             </div>
         </div>
-
+        
         <!-- Footer -->
-        <footer class="mt-12 text-center text-gray-500 text-sm">
-            <p>Mafia Game © 2025 | Doctor M!</p>
+        <footer class="mt-16 text-center text-gray-600 text-sm italic">
+            <p>© 2025 MAFIA UNDERWORLD | "Omertà is the law"</p>
         </footer>
     </div>
-
+    
     <script>
         // Firebase configuration
         const firebaseConfig = {
@@ -201,11 +295,11 @@
             appId: "1:181466033426:web:a5fcd5f9ffde2baca817cb",
             measurementId: "G-E5KEK1YFXH"
         };
-
+        
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-
+        
         // DOM Elements
         const roomSection = document.getElementById('room-section');
         const lobbySection = document.getElementById('lobby-section');
@@ -232,7 +326,8 @@
         const backToLobbyBtn = document.getElementById('back-to-lobby');
         const mafiaCountSelect = document.getElementById('mafia-count');
         const gameModeSelect = document.getElementById('game-mode');
-
+        const gunshotSound = document.getElementById('gunshot-sound');
+        
         // Game State
         let currentRoom = null;
         let playerId = null;
@@ -242,7 +337,7 @@
         let role = '';
         let roomUnsubscribe = null;
         let playersUnsubscribe = null;
-
+        
         // Generate a random 4-letter room code
         function generateRoomCode() {
             const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -252,39 +347,45 @@
             }
             return code;
         }
-
+        
+        // Play gunshot sound
+        function playGunshot() {
+            gunshotSound.currentTime = 0;
+            gunshotSound.play().catch(e => console.log("Audio play failed:", e));
+        }
+        
         // Join a room
         async function joinRoom(roomCode, isCreating = false) {
             playerName = playerNameInput.value.trim();
             if (!playerName) {
-                alert('Please enter your name');
+                alert('Every wiseguy needs an alias');
                 return;
             }
-
+            
             if (!roomCode) {
-                alert('Please enter a room code');
+                alert('You need the safehouse code, see?');
                 return;
             }
-
+            
             // Generate a unique player ID
             playerId = Math.random().toString(36).substring(2, 15);
-
+            
             // Check if room exists
             const roomRef = db.collection('rooms').doc(roomCode);
             const roomDoc = await roomRef.get();
-
+            
             if (!roomDoc.exists && !isCreating) {
-                alert('Room does not exist');
+                alert("This safehouse don't exist, capisce?");
                 return;
             }
-
+            
             // If creating a new room
             if (isCreating) {
                 if (roomDoc.exists) {
-                    alert('Room already exists');
+                    alert("This safehouse is already taken, see?");
                     return;
                 }
-
+                
                 await roomRef.set({
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     status: 'lobby',
@@ -296,10 +397,10 @@
                 });
                 isHost = true;
             }
-
+            
             currentRoom = roomCode;
             currentRoomCode.textContent = roomCode;
-
+            
             // Add player to the room
             await roomRef.collection('players').doc(playerId).set({
                 name: playerName,
@@ -308,25 +409,25 @@
                 joinedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 hasRevealed: false
             });
-
+            
             // Show lobby
             roomSection.classList.add('hidden');
             lobbySection.classList.remove('hidden');
-
+            
             // Listen for room changes
             roomUnsubscribe = roomRef.onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
-
+                
                 // Update player count
                 totalPlayers.textContent = data.playerCount || 0;
-
+                
                 // Show start game button for host when all are ready
                 if (isHost && data.status === 'lobby') {
                     const allReady = data.readyCount === data.playerCount && data.playerCount > 1;
                     startGameBtn.classList.toggle('hidden', !allReady);
                 }
-
+                
                 // Handle game start and role assignment
                 if (data.status === 'revealing' && data.gameStarted) {
                     // Show role section for all players
@@ -336,51 +437,53 @@
                     // Check if player has already revealed their role
                     checkRoleReveal();
                 }
-
+                
                 // Handle game reset
                 if (data.status === 'lobby' && roleSection.classList.contains('hidden') === false) {
                     resetToLobby();
                 }
             });
-
+            
             // Listen for players changes
             playersUnsubscribe = roomRef.collection('players').onSnapshot(snapshot => {
                 playersList.innerHTML = '';
                 let readyCount = 0;
                 let playerCount = 0;
-
+                
                 snapshot.forEach(doc => {
                     const player = doc.data();
                     playerCount++;
                     if (player.ready) readyCount++;
-
+                    
                     const playerElement = document.createElement('div');
-                    playerElement.className = `bg-gray-700 p-3 rounded-lg flex items-center justify-between ${player.ready ? 'player-ready border-2 border-green-500' : ''}`;
-                                        
+                    playerElement.className = `bg-gray-800 p-4 rounded-lg flex items-center justify-between border border-gray-700 ${player.ready ? 'player-ready border-2 border-red-500' : ''}`;
+                    
                     playerElement.innerHTML = `
                         <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
-                                <i class="fas fa-user"></i>
+                            <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center border border-gray-600">
+                                <i class="fas ${player.ready ? 'fa-check-circle text-red-500' : 'fa-user text-gray-400'}"></i>
                             </div>
-                            <span>${player.name}</span>
-                            ${doc.id === playerId ? '<span class="text-xs bg-gray-600 px-2 py-0.5 rounded">You</span>' : ''}
-                            ${player.host ? '<span class="text-xs bg-yellow-600 px-2 py-0.5 rounded">Host</span>' : ''}
+                            <span class="font-medium">${player.name}</span>
+                            ${doc.id === playerId ? '<span class="text-xs bg-gray-700 px-2 py-1 rounded border border-gray-600">YOU</span>' : ''}
+                            ${player.host ? '<span class="text-xs bg-yellow-700 px-2 py-1 rounded border border-yellow-600">BOSS</span>' : ''}
                         </div>
                         <div>
-                            ${player.ready ? '<i class="fas fa-check-circle text-green-500"></i>' : '<i class="far fa-clock text-gray-400"></i>'}
+                            ${player.ready ? '<span class="text-xs bg-red-900 px-2 py-1 rounded border border-red-800">READY</span>' : '<span class="text-xs bg-gray-700 px-2 py-1 rounded border border-gray-600">WAITING</span>'}
                         </div>
                     `;
-
+                    
                     playersList.appendChild(playerElement);
                 });
-
+                
                 // Update player count display
-                playerCount.textContent = `${playerCount} player${playerCount !== 1 ? 's' : ''}`;
-
+                playerCount.textContent = `${playerCount} ${playerCount !== 1 ? 'GOONS' : 'GOON'}`;
+                
                 // Update ready count in lobby
                 const readyPercentage = playerCount > 0 ? (readyCount / playerCount) * 100 : 0;
                 readyProgress.style.width = `${readyPercentage}%`;
-
+                document.getElementById('ready-count').textContent = readyCount;
+                document.getElementById('total-players').textContent = playerCount;
+                
                 // Update room stats
                 roomRef.update({
                     playerCount: playerCount,
@@ -388,7 +491,7 @@
                 });
             });
         }
-
+        
         // Check if player should reveal their role
         async function checkRoleReveal() {
             if (!currentRoom || !playerId) return;
@@ -405,40 +508,48 @@
                 }
             }
         }
-
+        
         // Toggle ready status
         async function toggleReady() {
             if (!currentRoom || !playerId) return;
-
+            
             isReady = !isReady;
             const roomRef = db.collection('rooms').doc(currentRoom);
-                        
+            
             await roomRef.collection('players').doc(playerId).update({
                 ready: isReady
             });
-
+            
+            // Play sound effect when readying up
+            if (isReady) {
+                playGunshot();
+            }
+            
             readyBtn.innerHTML = isReady
-                ? '<i class="fas fa-times"></i> Not Ready'
-                : '<i class="fas fa-check"></i> Ready';
+                ? '<i class="fas fa-handshake-slash"></i> NOT READY'
+                : '<i class="fas fa-handshake"></i> READY FOR THE JOB';
             readyBtn.className = isReady
-                ? 'w-full py-3 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-medium transition flex items-center justify-center gap-2'
-                : 'w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2';
+                ? 'w-full py-4 bg-gradient-to-r from-yellow-700 to-yellow-900 hover:from-yellow-600 hover:to-yellow-800 rounded-lg font-bold transition transform hover:scale-105 flex items-center justify-center gap-3'
+                : 'w-full py-4 bg-gradient-to-r from-green-700 to-green-900 hover:from-green-600 hover:to-green-800 rounded-lg font-bold transition transform hover:scale-105 flex items-center justify-center gap-3';
         }
-
+        
         // Start the game (host only)
         async function startGame() {
             if (!isHost || !currentRoom) return;
-
+            
+            // Play dramatic sound effect
+            playGunshot();
+            
             const roomRef = db.collection('rooms').doc(currentRoom);
             const playersSnapshot = await roomRef.collection('players').get();
             const players = playersSnapshot.docs.map(doc => doc.id);
             const mafiaCount = parseInt(mafiaCountSelect.value);
-
+            
             // Assign roles randomly
             const shuffledPlayers = [...players].sort(() => 0.5 - Math.random());
             const mafiaPlayers = shuffledPlayers.slice(0, mafiaCount);
             const citizenPlayers = shuffledPlayers.slice(mafiaCount);
-
+            
             // Update players with their roles
             const batch = db.batch();
             mafiaPlayers.forEach(playerId => {
@@ -450,49 +561,52 @@
                 batch.update(playerRef, { role: 'citizen' });
             });
             await batch.commit();
-
+            
             // Update room status to start the game
             await roomRef.update({
                 status: 'revealing',
                 gameStarted: true,
                 revealTriggered: false
             });
-
+            
             // Show role section for host immediately
             lobbySection.classList.add('hidden');
             roleSection.classList.remove('hidden');
         }
-
+        
         // Reveal role to player
         async function revealRole() {
             if (!currentRoom || !playerId) return;
-
+            
             const roomRef = db.collection('rooms').doc(currentRoom);
             const playerDoc = await roomRef.collection('players').doc(playerId).get();
             
             if (playerDoc.exists) {
                 role = playerDoc.data().role;
-
+                
                 // Set role display
                 if (role === 'mafia') {
                     roleText.textContent = 'MAFIA';
-                    roleDescription.textContent = 'Eliminate all citizens without being caught!';
+                    roleDescription.textContent = '"The family comes first. Eliminate all rats before they find you."';
                     document.getElementById('role-front').classList.add('role-mafia');
                     mafiaIcon.classList.remove('hidden');
                     citizenIcon.classList.add('hidden');
+                    
+                    // Play dramatic sound for mafia
+                    playGunshot();
                 } else {
                     roleText.textContent = 'CITIZEN';
-                    roleDescription.textContent = 'Find and eliminate the mafia before it\'s too late!';
+                    roleDescription.textContent = '"The streets must be cleaned. Find and eliminate the mobsters."';
                     document.getElementById('role-front').classList.add('role-citizen');
                     citizenIcon.classList.remove('hidden');
                     mafiaIcon.classList.add('hidden');
                 }
-
+                
                 // Mark player as having revealed their role
                 await roomRef.collection('players').doc(playerId).update({
                     hasRevealed: true
                 });
-
+                
                 // Flip card after a short delay for dramatic effect
                 setTimeout(() => {
                     roleCard.classList.add('flipped');
@@ -500,20 +614,20 @@
                 }, 1000);
             }
         }
-
+        
         // Reset to lobby
         async function resetToLobby() {
             if (!currentRoom || !playerId) return;
-
+            
             const roomRef = db.collection('rooms').doc(currentRoom);
-
+            
             // Reset player ready status
             await roomRef.collection('players').doc(playerId).update({
                 ready: false,
                 role: '',
                 hasRevealed: false
             });
-
+            
             // If host, reset the room status
             if (isHost) {
                 await roomRef.update({
@@ -522,31 +636,31 @@
                     revealTriggered: false
                 });
             }
-
+            
             // Reset local state
             isReady = false;
             role = '';
-
+            
             // Reset UI
-            readyBtn.innerHTML = '<i class="fas fa-check"></i> Ready';
-            readyBtn.className = 'w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2';
+            readyBtn.innerHTML = '<i class="fas fa-handshake"></i> READY FOR THE JOB';
+            readyBtn.className = 'w-full py-4 bg-gradient-to-r from-green-700 to-green-900 hover:from-green-600 hover:to-green-800 rounded-lg font-bold transition transform hover:scale-105 flex items-center justify-center gap-3';
             roleCard.classList.remove('flipped');
             document.getElementById('role-front').classList.remove('role-mafia', 'role-citizen');
-
+            
             // Show lobby
             roleSection.classList.add('hidden');
             lobbySection.classList.remove('hidden');
         }
-
+        
         // Leave room
         async function leaveRoom() {
             if (!currentRoom || !playerId) return;
-
+            
             const roomRef = db.collection('rooms').doc(currentRoom);
-
+            
             // Remove player from room
             await roomRef.collection('players').doc(playerId).delete();
-
+            
             // If host and last player, delete the room
             if (isHost) {
                 const playersSnapshot = await roomRef.collection('players').get();
@@ -558,18 +672,18 @@
                     await roomRef.update({ host: firstPlayer.id });
                 }
             }
-
+            
             // Clean up
             if (roomUnsubscribe) roomUnsubscribe();
             if (playersUnsubscribe) playersUnsubscribe();
-
+            
             // Reset state
             currentRoom = null;
             playerId = null;
             isHost = false;
             isReady = false;
             role = '';
-
+            
             // Reset UI
             roomSection.classList.remove('hidden');
             lobbySection.classList.add('hidden');
@@ -577,7 +691,7 @@
             playerNameInput.value = '';
             roomCodeInput.value = '';
         }
-
+        
         // Event Listeners
         joinRoomBtn.addEventListener('click', () => joinRoom(roomCodeInput.value.trim().toUpperCase()));
         createRoomBtn.addEventListener('click', () => joinRoom(generateRoomCode(), true));
@@ -588,25 +702,35 @@
         copyRoomCodeBtn.addEventListener('click', () => {
             navigator.clipboard.writeText(currentRoomCode.textContent);
             const originalText = copyRoomCodeBtn.innerHTML;
-            copyRoomCodeBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            copyRoomCodeBtn.innerHTML = '<i class="fas fa-check"></i> COPIED!';
             setTimeout(() => {
                 copyRoomCodeBtn.innerHTML = originalText;
             }, 2000);
         });
-
+        
         // Card click handler
         roleCard.addEventListener('click', () => {
             if (roleCard.classList.contains('flipped')) return;
             revealRole();
         });
-
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            // Generate a random player name
-            const adjectives = ['Clever', 'Brave', 'Sneaky', 'Wise', 'Quick', 'Silent', 'Sharp'];
-            const nouns = ['Fox', 'Wolf', 'Owl', 'Hawk', 'Panther', 'Lynx', 'Raven'];
-            const randomName = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+            // Generate a random mafia-style player name
+            const firstNames = ['Tony', 'Vito', 'Paulie', 'Sal', 'Frankie', 'Joey', 'Vinny', 'Mikey', 'Tommy', 'Bobby'];
+            const lastNames = ['Corleone', 'Soprano', 'Gambino', 'Lucchese', 'Bonanno', 'Genovese', 'Scalise', 'Anastasia', 'Lansky', 'Costello'];
+            const nicknames = ['The Snake', 'Fingers', 'The Butcher', 'Big Nose', 'The Hammer', 'The Fixer', 'The Ghost', 'The Wolf', 'The Bull', 'The Knife'];
+            
+            const randomName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} "${nicknames[Math.floor(Math.random() * nicknames.length)]}" ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
             playerNameInput.value = randomName;
+            
+            // Add some dramatic lighting effects
+            setInterval(() => {
+                const flickerElements = document.querySelectorAll('.neon-flicker');
+                flickerElements.forEach(el => {
+                    el.style.animationDuration = `${3 + Math.random() * 2}s`;
+                });
+            }, 5000);
         });
     </script>
 </body>
