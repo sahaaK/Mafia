@@ -291,7 +291,8 @@
                     host: playerId,
                     mafiaCount: parseInt(mafiaCountSelect.value),
                     gameMode: gameModeSelect.value,
-                    revealTriggered: false
+                    revealTriggered: false,
+                    gameStarted: false
                 });
                 isHost = true;
             }
@@ -304,7 +305,8 @@
                 name: playerName,
                 ready: false,
                 role: '',
-                joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+                joinedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                hasRevealed: false
             });
 
             // Show lobby
@@ -325,9 +327,14 @@
                     startGameBtn.classList.toggle('hidden', !allReady);
                 }
 
-                // Handle role reveal
-                if (data.status === 'revealing' && data.revealTriggered) {
-                    revealRole();
+                // Handle game start and role assignment
+                if (data.status === 'revealing' && data.gameStarted) {
+                    // Show role section for all players
+                    lobbySection.classList.add('hidden');
+                    roleSection.classList.remove('hidden');
+                    
+                    // Check if player has already revealed their role
+                    checkRoleReveal();
                 }
 
                 // Handle game reset
@@ -349,7 +356,7 @@
 
                     const playerElement = document.createElement('div');
                     playerElement.className = `bg-gray-700 p-3 rounded-lg flex items-center justify-between ${player.ready ? 'player-ready border-2 border-green-500' : ''}`;
-                    
+                                        
                     playerElement.innerHTML = `
                         <div class="flex items-center gap-3">
                             <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
@@ -382,21 +389,38 @@
             });
         }
 
+        // Check if player should reveal their role
+        async function checkRoleReveal() {
+            if (!currentRoom || !playerId) return;
+            
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            const playerDoc = await roomRef.collection('players').doc(playerId).get();
+            
+            if (playerDoc.exists) {
+                const playerData = playerDoc.data();
+                
+                // If player hasn't revealed yet and game has started
+                if (!playerData.hasRevealed) {
+                    await revealRole();
+                }
+            }
+        }
+
         // Toggle ready status
         async function toggleReady() {
             if (!currentRoom || !playerId) return;
 
             isReady = !isReady;
             const roomRef = db.collection('rooms').doc(currentRoom);
-            
+                        
             await roomRef.collection('players').doc(playerId).update({
                 ready: isReady
             });
 
-            readyBtn.innerHTML = isReady 
-                ? '<i class="fas fa-times"></i> Not Ready' 
+            readyBtn.innerHTML = isReady
+                ? '<i class="fas fa-times"></i> Not Ready'
                 : '<i class="fas fa-check"></i> Ready';
-            readyBtn.className = isReady 
+            readyBtn.className = isReady
                 ? 'w-full py-3 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-medium transition flex items-center justify-center gap-2'
                 : 'w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2';
         }
@@ -427,13 +451,14 @@
             });
             await batch.commit();
 
-            // Update room status
+            // Update room status to start the game
             await roomRef.update({
                 status: 'revealing',
+                gameStarted: true,
                 revealTriggered: false
             });
 
-            // Show role section
+            // Show role section for host immediately
             lobbySection.classList.add('hidden');
             roleSection.classList.remove('hidden');
         }
@@ -447,7 +472,7 @@
             
             if (playerDoc.exists) {
                 role = playerDoc.data().role;
-                
+
                 // Set role display
                 if (role === 'mafia') {
                     roleText.textContent = 'MAFIA';
@@ -463,6 +488,11 @@
                     mafiaIcon.classList.add('hidden');
                 }
 
+                // Mark player as having revealed their role
+                await roomRef.collection('players').doc(playerId).update({
+                    hasRevealed: true
+                });
+
                 // Flip card after a short delay for dramatic effect
                 setTimeout(() => {
                     roleCard.classList.add('flipped');
@@ -471,35 +501,38 @@
             }
         }
 
-        // Trigger role reveal (host only)
-        async function triggerReveal() {
-            if (!isHost || !currentRoom) return;
-            const roomRef = db.collection('rooms').doc(currentRoom);
-            await roomRef.update({ revealTriggered: true });
-        }
-
         // Reset to lobby
         async function resetToLobby() {
             if (!currentRoom || !playerId) return;
 
             const roomRef = db.collection('rooms').doc(currentRoom);
-            
+
             // Reset player ready status
             await roomRef.collection('players').doc(playerId).update({
                 ready: false,
-                role: ''
+                role: '',
+                hasRevealed: false
             });
+
+            // If host, reset the room status
+            if (isHost) {
+                await roomRef.update({
+                    status: 'lobby',
+                    gameStarted: false,
+                    revealTriggered: false
+                });
+            }
 
             // Reset local state
             isReady = false;
             role = '';
-            
+
             // Reset UI
             readyBtn.innerHTML = '<i class="fas fa-check"></i> Ready';
             readyBtn.className = 'w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2';
             roleCard.classList.remove('flipped');
             document.getElementById('role-front').classList.remove('role-mafia', 'role-citizen');
-            
+
             // Show lobby
             roleSection.classList.add('hidden');
             lobbySection.classList.remove('hidden');
@@ -510,7 +543,7 @@
             if (!currentRoom || !playerId) return;
 
             const roomRef = db.collection('rooms').doc(currentRoom);
-            
+
             // Remove player from room
             await roomRef.collection('players').doc(playerId).delete();
 
@@ -529,14 +562,14 @@
             // Clean up
             if (roomUnsubscribe) roomUnsubscribe();
             if (playersUnsubscribe) playersUnsubscribe();
-            
+
             // Reset state
             currentRoom = null;
             playerId = null;
             isHost = false;
             isReady = false;
             role = '';
-            
+
             // Reset UI
             roomSection.classList.remove('hidden');
             lobbySection.classList.add('hidden');
@@ -564,7 +597,7 @@
         // Card click handler
         roleCard.addEventListener('click', () => {
             if (roleCard.classList.contains('flipped')) return;
-            triggerReveal();
+            revealRole();
         });
 
         // Initialize
@@ -577,4 +610,4 @@
         });
     </script>
 </body>
-  </html>
+</html>
